@@ -16,6 +16,7 @@ package chef
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"reflect"
 	"regexp"
@@ -80,6 +81,7 @@ type SDConfig struct {
 	ChefServer      string                   `yaml:"chef_server"`
 	UserID          string                   `yaml:"user_id,omitempty"`
 	UserKey         config_util.Secret       `yaml:"user_key,omitempty"`
+	UserKeyLocation string                   `yaml:"user_key_file,omitempty"`
 	RefreshInterval model.Duration           `yaml:"refresh_interval,omitempty"`
 	IgnoreSSL       bool                     `yaml:"ignore_ssl,omitempty"`
 	MetaAttribute   []map[string]interface{} `yaml:"meta_attribute"`
@@ -116,11 +118,20 @@ func (c *SDConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err = validateAuthParam(c.UserID, "user_id"); err != nil {
 		return err
 	}
-	if err = validateAuthParam(string(c.UserKey), "user_key"); err != nil {
-		return err
-	}
 	if err = validateAuthParam(c.ChefServer, "chef_server"); err != nil {
 		return err
+	}
+
+	if c.UserKeyLocation == "" {
+		if err = validateAuthParam(string(c.UserKey), "user_key"); err != nil {
+			return err
+		}
+	}
+
+	if string(c.UserKey) == "" {
+		if err = validateAuthParam(c.UserKeyLocation, "user_key_file"); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -154,12 +165,27 @@ func NewDiscovery(cfg *SDConfig, logger log.Logger) *Discovery {
 
 // createChefClient is a helper function for creating an Chef server connection.
 func createChefClient(cfg SDConfig) (*ChefClient, error) {
-	client, err := chef.NewClient(&chef.Config{
+	var key string
+
+	if cfg.UserKey != "" {
+		key = string(cfg.UserKey)
+	} else {
+		io, err := ioutil.ReadFile(cfg.UserKeyLocation)
+		if err != nil {
+			return &ChefClient{}, err
+		}
+		key = string(io)
+	}
+
+	config := chef.Config{
 		Name:    cfg.UserID,
-		Key:     string(cfg.UserKey),
+		Key:     key,
 		SkipSSL: cfg.IgnoreSSL,
 		BaseURL: cfg.ChefServer,
-	})
+	}
+
+	client, err := chef.NewClient(&config)
+
 	if err != nil {
 		return &ChefClient{}, err
 	}
@@ -286,7 +312,7 @@ func unwrapArray(t interface{}) []string {
 // function for getting passed a list of chef attributes to be collected for relabelling
 func metaAttr(h map[string]interface{}, n virtualMachine) interface{} {
 	var res interface{}
-	for k, _ := range h {
+	for k := range h {
 		escape := regexp.MustCompile(`\\_`)
 		escaped := escape.ReplaceAllString(k, `\\`)
 		re := regexp.MustCompile(`_`)
