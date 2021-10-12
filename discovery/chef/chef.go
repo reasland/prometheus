@@ -230,7 +230,9 @@ func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 			}
 
 			for _, attr := range d.cfg.MetaAttribute {
+				fmt.Print("attr", attr)
 				res := metaAttr(attr, node)
+				fmt.Print("res", res)
 				if res != nil {
 					for k, v := range attr {
 						if v != nil {
