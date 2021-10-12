@@ -4,6 +4,7 @@
 /*.yml
 *.exe
 
+
 /prometheus
 /promtool
 benchmark.txt
@@ -25,3 +26,4 @@ npm_licenses.tar.bz2
 
 /vendor
 /.build
+prometheus.pem
